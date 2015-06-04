@@ -16,7 +16,7 @@ class Config(object):
 
     @staticmethod
     def _finditem(obj, key):
-        if key in obj: 
+        if key in obj:
             return obj[key]
         for k, v in obj.items():
             if isinstance(v, dict):

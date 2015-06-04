@@ -1,0 +1,151 @@
+*** Settings ***
+Suite Setup       Create Session    session    http://${CONTROLLER}:${RESTPORT}    auth=${AUTH}    headers=${HEADERS}
+Suite Teardown    Delete All Sessions
+Variables         Variables.py
+Library           Common.py
+Library           SSHLibrary
+Library           Collections
+Library           Topologynew.py
+Library           OdlWrapperApi.py
+
+*** Variables ***
+
+${circuit_1}      {"id":1,"source":{"switch-id":"0000000000000001","port-id":1,"vlan-id":0},"destination":{"switch-id":"0000000000000003","port-id":1,"vlan-id":0},"datapath-type":"OF","flow-direction":"BI","description":"blahblah","maximum-bandwidth":1024,"maximum-hop-count":null}
+${circuit_2}      {"id":2,"source":{"switch-id":"0000000000000001","port-id":1,"vlan-id":0},"destination":{"switch-id":"0000000000000001","port-id":2,"vlan-id":0},"datapath-type":"OF","flow-direction":"BI","description":"blahblah","maximum-bandwidth":1024,"maximum-hop-count":null}
+
+${discovery_config}    {"marker": "3q3wDQ==","period": 5,"timeout": 15,"switch-policies": [{"switch-id": "0000000000000001", "policy": "allow-all"},{"switch-id": "0000000000000002", "policy": "allow-all"},{"switch-id": "0000000000000003", "policy": "allow-all"}]}
+${for_config_delete}    {"marker": "3q3wDQ==","period": 5,"timeout": 15,"switch-policies": []}
+
+${configuration_update_timeout}    15
+${ping_timeout}    10
+${STATISTIC_UPDATE_TIMEOUT}    10
+${screen_name}    odl-karaf
+
+
+*** Keywords ***
+Get ovs info
+     Write    sudo ovs-vsctl show
+     Sleep    1
+     Read
+     Write    sudo ovs-ofctl -O OpenFlow13 dump-flows s1
+     Sleep    1
+     Read
+     Write    sudo ovs-ofctl -O OpenFlow13 dump-flows s2
+     Sleep    1
+     Read
+     Write    sudo ovs-ofctl -O OpenFlow13 dump-flows s3
+     Sleep    1
+     Read
+
+*** Test Cases ***
+Port statistic
+    [Tags]     Smoke
+    [Setup]    Run Keyword    Get ovs info
+               Create Discovery Config    data=${discovery_config}    alias=session
+               Sleep    ${configuration_update_timeout}
+               Run Keyword    Get ovs info
+
+    ${resp}    Get Port Statictic    switch_id=0000000000000001    port_id=1    interval=${STATISTIC_UPDATE_TIMEOUT}    alias=session
+    Should Be Equal As Strings    ${resp.status_code}    200
+
+    Delete Discovery Config    data=${for_config_delete}    alias=session
+
+Circuit creation
+     [Tags]     Smoke
+     [Setup]    Run Keyword    Get ovs info
+                Create Discovery Config    data=${discovery_config}    alias=session
+                Sleep    ${configuration_update_timeout}
+                Run Keyword    Get ovs info
+
+     ${resp}    Create Circuit    data=${circuit_1}    alias=session
+     Should Be Equal As Strings    ${resp.status_code}    200
+
+     Run Keyword    Get ovs info
+
+     Delete Circuit    circuit_id=1    alias=session
+     Delete Discovery Config    data=${for_config_delete}    alias=session
+
+Circuit statistic
+     [Tags]     Smoke
+     [Setup]    Create Discovery Config    data=${discovery_config}    alias=session
+                Sleep    ${configuration_update_timeout}
+                Create Circuit    data=${circuit_1}    alias=session
+                Sleep    10
+
+     ${resp}    Get Circuit Statistic    circuit_id=1    interval=${STATISTIC_UPDATE_TIMEOUT}    alias=session
+     Should Be Equal As Strings    ${resp.status_code}    200
+
+     Delete Circuit    circuit_id=1    alias=session
+     Delete Discovery Config    data=${for_config_delete}    alias=session
+
+Port statistic from incorrect port
+     [Tags]    Debug
+     Sleep    10
+     Run Keyword    Get ovs info
+
+     ${resp_nodes}    Get    session    restconf/operational/opendaylight-inventory:nodes/
+     Log    ${resp_nodes}
+     Log    ${resp_nodes.json()}
+
+     ${resp}    Get Port Statictic    switch_id=0000000000000001    port_id=3    interval=${STATISTIC_UPDATE_TIMEOUT}    alias=session
+     Should Be Equal As Strings    ${resp.status_code}    404
+     Write    screen -S ${screen_name} -p 0 -X stuff "log:set INFO \n"
+     Sleep    5
+     Run Keyword    Get ovs info
+
+Circuit on the same switch
+     [Tags]     Smoke    Debug
+     [Setup]    Create Discovery Config    data=${discovery_config}    alias=session
+                Sleep    ${configuration_update_timeout}
+                Read
+                Sleep    5
+                Read
+                Run Keyword And Ignore Error    Write    screen -S mininet -X quit
+                Sleep    5
+                Write    screen -dmS mininet
+                Write    screen -S mininet -X stuff "sudo mn -c \n"
+                Sleep    5
+                Write    screen -S mininet -X stuff "sudo mn --controller=remote,ip=${CONTROLLER} --topo tree,1 --switch ovsk,protocols=OpenFlow13,datapath=user \n"
+                Sleep    5
+                Read
+
+     Run Keyword    Get ovs info
+
+     ${resp}    Create circuit    data=${circuit_2}    alias=session
+     Run Keyword And Continue On Failure    Should Be Equal As Strings    ${resp.status_code}    200
+     Sleep    ${configuration_update_timeout}
+
+     Run Keyword    Get ovs info
+
+     Write    screen -S mininet -p 0 -X stuff "h1 ping -w ${ping_timeout} h2 > /tmp/1 \n"
+     Sleep    ${ping_timeout}
+     Write    sudo cat /tmp/1
+     Sleep    1
+     ${result}    Read
+
+     Run Keyword And Continue On Failure    Should Contain    ${result}    64 bytes
+
+     ${resp}    Get Circuit Statistic    circuit_id=2    interval=${STATISTIC_UPDATE_TIMEOUT}    alias=session
+     Run Keyword And Continue On Failure    Should Be Equal As Strings    ${resp.status_code}    200
+
+     ${resp}    Delete circuit    circuit_id=2    alias=session
+
+     Run Keyword And Continue On Failure    Should Be Equal As Strings    ${resp.status_code}    200
+
+     Delete discovery config    data=${for_config_delete}    alias=session
+
+Switch reachability
+     [Tags]     Smoke
+     [Setup]    Create Discovery Config    data=${discovery_config}    alias=session
+                Sleep    ${configuration_update_timeout}
+
+     ${resp}    Get Switch    switch_id=0000000000000001    alias=session
+     Should Be Equal As Strings    ${resp.status_code}    200
+     ${connected}    Get From Dictionary    ${resp.json()}    connected
+
+     Delete discovery config    data=${for_config_delete}    alias=session
+
+Get user list
+     [Tags]              Smoke
+     ${resp}    Get user list    alias=session
+     Should Be Equal As Strings    ${resp.status_code}    200

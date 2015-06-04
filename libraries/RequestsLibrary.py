@@ -1,0 +1,208 @@
+import requests
+import json
+
+from urllib import urlencode
+
+
+import robot
+
+from robot.libraries.BuiltIn import BuiltIn
+
+
+class RequestsLibrary(object):
+
+    def _utf8_urlencode(self, data):
+        if not type(data) is dict:
+            return data
+
+        utf8_data = {}
+        for k, v in data.iteritems():
+            utf8_data[k] = unicode(v).encode('utf-8')
+        return urlencode(utf8_data)
+
+    def create_session(self, url, headers={}, cookies=None,
+                       auth=None, timeout=None, proxies=None,
+                       verify=False):
+
+        """ Create Session: create a HTTP session to a server
+        `url` Base url of the server
+        `headers` Dictionary of default headers
+        `auth` Dictionary of username & password for HTTP Basic Auth
+        `timeout` connection timeout
+        `proxies` proxy server url
+        `verify` set to True if Requests should verify the certificate
+        """
+
+        auth = requests.auth.HTTPBasicAuth(*auth) if auth else None
+
+        self.session = requests.Session()
+
+        self.session.headers.update(headers)
+        self.session.auth = auth if auth else sels.session.auth
+        self.session.proxies = proxies if proxies else self.session.proxies
+
+        self.session.verify = verify
+
+        # cant pass these into the Session anymore
+        self.timeout = timeout
+        self.cookies = cookies
+        self.verify = verify
+
+        self.session.url = url
+
+        return self.session
+
+    def to_json(self, content):
+        """ Convert a string to a JSON object
+
+        `content` String content to convert into JSON
+        """
+        return json.loads(content)
+
+    def _get_url(self, session, uri):
+        """ Helpere method to get the full url """
+        url = session.url
+        if uri:
+            slash = '' if uri.startswith('/') else '/'
+            url = "%s%s%s" % (session.url, slash, uri)
+        return url
+
+    def get(self, alias, uri, headers=None):
+        """ Send a GET request on the session object found using the
+            given `alias`
+        `uri` to send the GET request to
+        `headers` a dictionary of headers to use with the request
+        """
+
+        resp = self.session.get(self._get_url(self.session, uri),
+                                headers=headers,
+                                cookies=self.cookies, timeout=self.timeout)
+
+        return resp
+
+    def post(self, alias, uri, data={}, headers=None, files={}):
+        """ Send a POST request on the session object found using the
+        given `alias`
+        `uri` to send the GET request to
+        `data` a dictionary of key-value pairs that will be urlencoded
+               and sent as POST data
+               or binary data that is sent as the raw body content
+        `headers` a dictionary of headers to use with the request
+        `files` a dictionary of file names containing file
+                data to POST to the server
+        """
+
+        data = self._utf8_urlencode(data)
+
+        resp = self.session.post(self._get_url(self.session, uri),
+                                 data=data, headers=headers,
+                                 files=files,
+                                 cookies=self.cookies, timeout=self.timeout)
+        return resp
+
+    def postjson(self, alias, uri, data={}, headers=None, files={}):
+        """ Send a POST request on the session object found using the
+        given `alias`
+
+        `alias` that will be used to identify the Session object in the cache
+
+        `uri` to send the GET request to
+
+        `data` a dictionary of key-value pairs that will be urlencoded
+               and sent as POST data
+               or binary data that is sent as the raw body content
+
+        `headers` a dictionary of headers to use with the request
+
+        `files` a dictionary of file names containing
+                file data to POST to the server
+        """
+
+        data = json.dumps(data)
+
+        resp = self.session.post(self._get_url(self.session, uri),
+                                 data=data, headers=headers,
+                                 files=files,
+                                 cookies=self.cookies, timeout=self.timeout)
+
+        return resp
+
+    def put(self, alias, uri, data=None, headers=None):
+        """ Send a PUT request on the session object found using the
+        given `alias`
+
+        `alias` that will be used to identify the Session object in the cache
+
+        `uri` to send the PUT request to
+
+        `headers` a dictionary of headers to use with the request
+
+        """
+
+        # data = self._utf8_urlencode(data)
+        data = json.dumps(data)
+
+        resp = self.session.put(self._get_url(self.session, uri),
+                           data=data, headers=headers,
+                           cookies=self.cookies, timeout=self.timeout)
+
+        return resp
+
+    def put_xml(self, alias, uri, data=None, headers=None):
+        """ Send a PUT_xml request on the session object found using the
+        given `alias`
+
+        `alias` that will be used to identify the Session object in the cache
+
+        `uri` to send the PUT_xml request to
+
+        `headers` a dictionary of headers to use with the request
+
+        """
+
+        data = self._utf8_urlencode(data)
+        # data = json.dumps(data)
+
+        resp = self.session.put(self._get_url(self.session, uri),
+                           data=data, headers=headers,
+                           cookies=self.cookies, timeout=self.timeout)
+
+
+        return resp
+
+    def delete(self, alias, uri, data=(), headers=None):
+        """ Send a DELETE request on the session object found using the
+        given `alias`
+
+        `alias` that will be used to identify the Session object in the cache
+
+        `uri` to send the DELETE request to
+
+        `headers` a dictionary of headers to use with the request
+
+        """
+
+        args = "?%s" % urlencode(data) if data else ''
+        resp = \
+            self.session.delete("%s%s" % (self._get_url(self.session, uri), args),
+                           headers=headers, cookies=self.cookies,
+                           timeout=self.timeout)
+
+        return resp
+
+    def head(self, alias, uri, headers=None):
+        """ Send a HEAD request on the session object found using the
+        given `alias`
+
+        `alias` that will be used to identify the Session object in the cache
+
+        `uri` to send the HEAD request to
+
+        `headers` a dictionary of headers to use with the request
+
+        """
+
+        resp = self.session.head(self._get_url(self.session, uri), headers=headers,
+                            cookies=self.cookies, timeout=self.timeout)
+
+        return resp
